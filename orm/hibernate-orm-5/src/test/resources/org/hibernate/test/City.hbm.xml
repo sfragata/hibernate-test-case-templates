@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+"http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+<!-- Generated 2011-02-28 14:39:05 by Hibernate Tools 3.4.0.CR1 -->
+<hibernate-mapping>
+    <class name="org.hibernate.bugs.entity.City" table="CITY">
+        <id name="cityNumber" type="java.lang.Integer">
+            <column name="CITY_NUM" />
+            <generator class="assigned" />
+        </id>
+        <property name="cityName" type="java.lang.String">
+            <column name="CITY_NAME" />
+        </property>
+        <property name="countryName" type="java.lang.String">
+            <column name="COUNTRY_NAME" />
+        </property>
+    </class>
+    <sql-query name="updateCityName">
+        <![CDATA[
+        UPDATE CITY SET CITY_NAME = ? WHERE CITY_NUM = ?        
+        ]]>
+    </sql-query>   
+    <sql-query name="deleteCity">
+        <![CDATA[
+        DELETE FROM CITY WHERE CITY_NUM = ?        
+        ]]>
+    </sql-query>   
+
+    <sql-query name="findByName">
+        <![CDATA[
+        select * FROM CITY WHERE CITY_NAME = ?        
+        ]]>
+    </sql-query>   
+
+    
+</hibernate-mapping>

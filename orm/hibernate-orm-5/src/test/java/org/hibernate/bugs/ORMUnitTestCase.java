@@ -15,65 +15,143 @@
  */
 package org.hibernate.bugs;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import java.util.List;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+import org.hibernate.bugs.entity.City;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
+import org.hibernate.query.NativeQuery;
 import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
-/**
- * This template demonstrates how to develop a test case for Hibernate ORM, using its built-in unit test framework.
- * Although ORMStandaloneTestCase is perfectly acceptable as a reproducer, usage of this class is much preferred.
- * Since we nearly always include a regression test with bug fixes, providing your reproducer using this method
- * simplifies the process.
- *
- * What's even better?  Fork hibernate-orm itself, add your test case directly to a module's unit tests, then
- * submit it as a PR!
- */
-public class ORMUnitTestCase extends BaseCoreFunctionalTestCase {
+public class ORMUnitTestCase
+    extends BaseCoreFunctionalTestCase {
 
-	// Add your entities here.
-	@Override
-	protected Class[] getAnnotatedClasses() {
-		return new Class[] {
-//				Foo.class,
-//				Bar.class
-		};
-	}
+    private static final String BASE_COUNTRY_NAME = "country";
 
-	// If you use *.hbm.xml mappings, instead of annotations, add the mappings here.
-	@Override
-	protected String[] getMappings() {
-		return new String[] {
-//				"Foo.hbm.xml",
-//				"Bar.hbm.xml"
-		};
-	}
-	// If those mappings reside somewhere other than resources/org/hibernate/test, change this.
-	@Override
-	protected String getBaseForMappings() {
-		return "org/hibernate/test/";
-	}
+    private static final String BASE_CITY_NAME = "city1";
 
-	// Add in any settings that are specific to your test.  See resources/hibernate.properties for the defaults.
-	@Override
-	protected void configure(Configuration configuration) {
-		super.configure( configuration );
+    private static final String CITY_NAME = "city2";
 
-		configuration.setProperty( AvailableSettings.SHOW_SQL, Boolean.TRUE.toString() );
-		configuration.setProperty( AvailableSettings.FORMAT_SQL, Boolean.TRUE.toString() );
-		//configuration.setProperty( AvailableSettings.GENERATE_STATISTICS, "true" );
-	}
+    @Override
+    protected Class[] getAnnotatedClasses() {
 
-	// Add your tests, using standard JUnit.
-	@Test
-	public void hhh123Test() throws Exception {
-		// BaseCoreFunctionalTestCase automatically creates the SessionFactory and provides the Session.
-		Session s = openSession();
-		Transaction tx = s.beginTransaction();
-		// Do stuff...
-		tx.commit();
-		s.close();
-	}
+        return new Class[] {};
+    }
+
+    // If you use *.hbm.xml mappings, instead of annotations, add the mappings here.
+    @Override
+    protected String[] getMappings() {
+
+        return new String[] { "City.hbm.xml" };
+    }
+
+    @Override
+    protected String getBaseForMappings() {
+
+        return "org/hibernate/test/";
+    }
+
+    @Override
+    protected void configure(
+        final Configuration configuration) {
+
+        super.configure(configuration);
+
+        configuration.setProperty(AvailableSettings.SHOW_SQL, Boolean.TRUE.toString());
+        configuration.setProperty(AvailableSettings.FORMAT_SQL, Boolean.FALSE.toString());
+        configuration.setProperty(AvailableSettings.GENERATE_STATISTICS, Boolean.TRUE.toString());
+        configuration.setProperty(AvailableSettings.LOG_SESSION_METRICS, Boolean.FALSE.toString());
+
+        // Enable query comments
+        configuration.setProperty(AvailableSettings.USE_SQL_COMMENTS, Boolean.TRUE.toString());
+
+    }
+
+    @Before
+    public void before() {
+
+        final City city = new City(1, BASE_CITY_NAME, BASE_COUNTRY_NAME);
+        final Session s = openSession();
+        final Transaction tx = s.beginTransaction();
+        s.save(city);
+        tx.commit();
+        s.close();
+    }
+
+    @After
+    public void after() {
+
+        final City city = new City(1, BASE_CITY_NAME, BASE_COUNTRY_NAME);
+        try (final Session s = openSession()) {
+            final Transaction tx = s.beginTransaction();
+            s.delete(city);
+            tx.commit();
+        }
+    }
+
+    /**
+     * When use UPDATE NAMED QUERY the comment doesn't works
+     */
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void hhh11640NamedQueryUpdateDoesntLogQueryComment()
+        throws Exception {
+
+        try (final Session s = openSession()) {
+            final NativeQuery namedNativeQuery = s.getNamedNativeQuery("updateCityName");
+            namedNativeQuery.setParameter(0, CITY_NAME);
+            namedNativeQuery.setParameter(1, 1);
+            final Transaction tx = s.beginTransaction();
+            final int rows = namedNativeQuery.executeUpdate();
+            tx.commit();
+            assertEquals(1, rows);
+        }
+        // Check log and you will see that this named query is logged WITHOUT the comments
+    }
+
+    /**
+     * When use DELETE NAMED QUERY the comment doesn't works
+     */
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void hhh11640NamedQueryDeleteDoesntLogQueryComment()
+        throws Exception {
+
+        try (final Session s = openSession()) {
+            final NativeQuery namedNativeQuery = s.getNamedNativeQuery("deleteCity");
+            namedNativeQuery.setParameter(0, 1);
+            final Transaction tx = s.beginTransaction();
+            final int rows = namedNativeQuery.executeUpdate();
+            tx.commit();
+            assertEquals(1, rows);
+        }
+        // Check log and you will see that this named query is logged WITHOUT the comments
+    }
+
+    /**
+     * When use SELECT NAMED QUERY the comment works
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @Test
+    public void hhh11640NamedQuerySelectDoesLogQueryComment()
+        throws Exception {
+
+        try (final Session s = openSession()) {
+            final NativeQuery namedNativeQuery = s.getNamedNativeQuery("findByName");
+            namedNativeQuery.setParameter(0, BASE_CITY_NAME);
+            final List<Object[]> resultList = namedNativeQuery.getResultList();
+            assertNotNull(resultList);
+            assertEquals(1, resultList.size());
+        }
+        // Check log and you will see that this named query is logged WITH the comments
+    }
+
 }
