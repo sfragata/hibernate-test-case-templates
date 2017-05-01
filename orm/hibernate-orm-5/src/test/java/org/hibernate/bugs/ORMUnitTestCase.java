@@ -15,65 +15,148 @@
  */
 package org.hibernate.bugs;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+
+import java.util.Set;
+
+import javax.persistence.EntityManager;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Root;
+
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+import org.hibernate.bugs.entity.City;
+import org.hibernate.bugs.entity.State;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
+import org.hibernate.criterion.DetachedCriteria;
+import org.hibernate.criterion.Restrictions;
 import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
 import org.junit.Test;
 
-/**
- * This template demonstrates how to develop a test case for Hibernate ORM, using its built-in unit test framework.
- * Although ORMStandaloneTestCase is perfectly acceptable as a reproducer, usage of this class is much preferred.
- * Since we nearly always include a regression test with bug fixes, providing your reproducer using this method
- * simplifies the process.
- *
- * What's even better?  Fork hibernate-orm itself, add your test case directly to a module's unit tests, then
- * submit it as a PR!
- */
-public class ORMUnitTestCase extends BaseCoreFunctionalTestCase {
+public class ORMUnitTestCase
+    extends BaseCoreFunctionalTestCase {
 
-	// Add your entities here.
-	@Override
-	protected Class[] getAnnotatedClasses() {
-		return new Class[] {
-//				Foo.class,
-//				Bar.class
-		};
-	}
+    private static final String CITY_NAME_1 = "city1";
 
-	// If you use *.hbm.xml mappings, instead of annotations, add the mappings here.
-	@Override
-	protected String[] getMappings() {
-		return new String[] {
-//				"Foo.hbm.xml",
-//				"Bar.hbm.xml"
-		};
-	}
-	// If those mappings reside somewhere other than resources/org/hibernate/test, change this.
-	@Override
-	protected String getBaseForMappings() {
-		return "org/hibernate/test/";
-	}
+    private static final String CITY_NAME_2 = "city2";
 
-	// Add in any settings that are specific to your test.  See resources/hibernate.properties for the defaults.
-	@Override
-	protected void configure(Configuration configuration) {
-		super.configure( configuration );
+    private static final String STATE_NAME = "state1";
 
-		configuration.setProperty( AvailableSettings.SHOW_SQL, Boolean.TRUE.toString() );
-		configuration.setProperty( AvailableSettings.FORMAT_SQL, Boolean.TRUE.toString() );
-		//configuration.setProperty( AvailableSettings.GENERATE_STATISTICS, "true" );
-	}
+    @Override
+    protected Class[] getAnnotatedClasses() {
 
-	// Add your tests, using standard JUnit.
-	@Test
-	public void hhh123Test() throws Exception {
-		// BaseCoreFunctionalTestCase automatically creates the SessionFactory and provides the Session.
-		Session s = openSession();
-		Transaction tx = s.beginTransaction();
-		// Do stuff...
-		tx.commit();
-		s.close();
-	}
+        return new Class[] {};
+    }
+
+    // If you use *.hbm.xml mappings, instead of annotations, add the mappings here.
+    @Override
+    protected String[] getMappings() {
+
+        return new String[] { "City.hbm.xml", "State.hbm.xml" };
+    }
+
+    @Override
+    protected String getBaseForMappings() {
+
+        return "org/hibernate/test/";
+    }
+
+    @Override
+    protected void configure(
+        final Configuration configuration) {
+
+        super.configure(configuration);
+
+        configuration.setProperty(AvailableSettings.SHOW_SQL, Boolean.TRUE.toString());
+        configuration.setProperty(AvailableSettings.FORMAT_SQL, Boolean.FALSE.toString());
+        configuration.setProperty(AvailableSettings.GENERATE_STATISTICS, Boolean.TRUE.toString());
+        configuration.setProperty(AvailableSettings.LOG_SESSION_METRICS, Boolean.FALSE.toString());
+
+        // Enable query comments
+        configuration.setProperty(AvailableSettings.USE_SQL_COMMENTS, Boolean.TRUE.toString());
+
+    }
+
+    @Override
+    protected void prepareTest()
+        throws Exception {
+
+        final State state = new State(1, STATE_NAME);
+
+        final City city1 = new City(1, CITY_NAME_1);
+        final City city2 = new City(2, CITY_NAME_2);
+
+        city2.setState(state);
+        city1.setState(state);
+        state.getCities().add(city1);
+        state.getCities().add(city2);
+        try (final Session s = openSession()) {
+            final Transaction tx = s.beginTransaction();
+            s.save(state);
+            tx.commit();
+        }
+    }
+
+    @Override
+    protected void cleanupTest()
+        throws Exception {
+
+        try (final Session s = openSession()) {
+            final Transaction tx = s.beginTransaction();
+            final State state = s.load(State.class, 1);
+            s.delete(state);
+            tx.commit();
+        }
+    }
+
+    /**
+     * If you check the sql logs the comment doesn't work for the children (cities)
+     */
+    @Test
+    public void hhh11641ChildrenDoesntLogQueryCommentInCriteriaQuery()
+        throws Exception {
+
+        final EntityManager entityManager = sessionFactory().createEntityManager();
+
+        final CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+
+        final CriteriaQuery<Object> criteria = criteriaBuilder.createQuery();
+
+        final Root<State> stateRoot = criteria.from(State.class);
+        criteria.select(stateRoot);
+        criteria.where(criteriaBuilder.equal(stateRoot.get("stateNumber"), 1));
+        final State state = (State) entityManager.createQuery(criteria).getSingleResult();
+
+        assertNotNull(state);
+        final Set<City> cities = state.getCities();
+        assertNotNull(cities);
+        assertFalse(cities.isEmpty());
+
+    }
+
+    /**
+     * If you check the sql logs the comment doesn't work for the children (cities)
+     */
+    @Test
+    public void hhh11641ChildrenDoesntLogQueryCommentInDetachedCriteria()
+        throws Exception {
+
+        try (final Session s = openSession()) {
+
+            final DetachedCriteria criteria = DetachedCriteria.forClass(State.class);
+
+            criteria.add(Restrictions.eq("stateNumber", 1));
+
+            final State state = (State) criteria.getExecutableCriteria(s).uniqueResult();
+            assertNotNull(state);
+            final Set<City> cities = state.getCities();
+            assertNotNull(cities);
+            assertFalse(cities.isEmpty());
+        }
+
+    }
+
 }
